@@ -1,21 +1,35 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-<title>Deepmake</title>
+
+<title>DeepMake</title>
+
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+
+<link rel="stylesheet" href="style.css">
+
 </head>
 
 <body>
 
-<h1>Deepmake</h1>
-  <p>deepfakes but worse</p>
+<h1>DeepMake</h1>
+  <p>deepfake but worse</p>
 
-<input type="file" id="source">
-<input type="file" id="target">
+<div class="controls">
 
-<button onclick="runSwap()">Swap Faces</button>
+<label>Source Face</label>
+<input type="file" id="sourceImage">
+
+<label>Target Video</label>
+<input type="file" id="targetVideo">
+
+<button onclick="startProcessing()">Process Video</button>
+<button onclick="downloadVideo()">Download Video</button>
+
+</div>
+
+<video id="video" controls></video>
 
 <canvas id="canvas"></canvas>
 
