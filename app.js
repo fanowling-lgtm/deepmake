@@ -1,6 +1,5 @@
 const video = document.getElementById("video")
 const canvas = document.getElementById("canvas")
-const videoInput = document.getElementById("videoInput")
 
 let renderer
 let scene
@@ -10,18 +9,49 @@ let material
 
 let faceMesh
 
-let clock = new THREE.Clock()
+let photoTexture
 
-/* Load video */
+/* Webcam */
 
-videoInput.onchange = ()=>{
+navigator.mediaDevices
+.getUserMedia({video:true})
+.then(stream => {
 
- const file = videoInput.files[0]
- video.src = URL.createObjectURL(file)
+ video.srcObject = stream
+
+})
+
+/* Load Photo */
+
+document
+.getElementById("photoInput")
+.onchange = e => {
+
+ const file = e.target.files[0]
+
+ const img = new Image()
+ img.src = URL.createObjectURL(file)
+
+ img.onload = () => {
+
+  createPhotoTexture(img)
+
+ }
 
 }
 
-/* Setup Three.js */
+/* Create texture */
+
+function createPhotoTexture(img){
+
+ const texture = new THREE.Texture(img)
+ texture.needsUpdate = true
+
+ photoTexture = texture
+
+}
+
+/* Three.js */
 
 function setupThree(w,h){
 
@@ -37,19 +67,22 @@ function setupThree(w,h){
 
 }
 
-/* Create Face Geometry */
+/* Create face mesh */
 
 function createMesh(landmarks){
 
  const vertices=[]
+ const uvs=[]
 
  for(let p of landmarks){
 
   vertices.push(
    (p.x-0.5)*2,
    -(p.y-0.5)*2,
-   p.z
+   0
   )
+
+  uvs.push(p.x,1-p.y)
 
  }
 
@@ -61,49 +94,44 @@ function createMesh(landmarks){
   new THREE.Float32BufferAttribute(vertices,3)
  )
 
+ geometry.setAttribute(
+  "uv",
+  new THREE.Float32BufferAttribute(uvs,2)
+ )
+
  material =
-  new THREE.ShaderMaterial({
-
-   vertexShader,
-   fragmentShader,
-
-   uniforms:{
-    time:{value:0}
-   }
-
+  new THREE.MeshBasicMaterial({
+   map:photoTexture
   })
 
- mesh = new THREE.Points(
-  geometry,
-  material
- )
+ mesh =
+  new THREE.Points(geometry,material)
 
  scene.add(mesh)
 
 }
 
-/* Update Geometry from Face Tracking */
+/* Update animation */
 
-function updateGeometry(landmarks){
+function updateMesh(landmarks){
 
  const pos =
   mesh.geometry.attributes.position.array
 
  for(let i=0;i<landmarks.length;i++){
 
-  let p = landmarks[i]
+  const p = landmarks[i]
 
   pos[i*3] = (p.x-0.5)*2
   pos[i*3+1] = -(p.y-0.5)*2
-  pos[i*3+2] = p.z
 
  }
 
- mesh.geometry.attributes.position.needsUpdate=true
+ mesh.geometry.attributes.position.needsUpdate = true
 
 }
 
-/* FaceMesh Setup */
+/* FaceMesh */
 
 function setupFaceMesh(){
 
@@ -127,11 +155,9 @@ function setupFaceMesh(){
 
 }
 
-/* Frame Processing */
+/* Frame loop */
 
 async function processFrame(){
-
- if(video.paused || video.ended) return
 
  await faceMesh.send({image:video})
 
@@ -139,7 +165,7 @@ async function processFrame(){
 
 }
 
-/* Results Handler */
+/* Results */
 
 function onResults(results){
 
@@ -148,18 +174,19 @@ function onResults(results){
   const landmarks =
    results.multiFaceLandmarks[0]
 
-  if(!mesh){
+  if(!mesh && photoTexture){
 
    createMesh(landmarks)
 
   }
 
-  updateGeometry(landmarks)
+  if(mesh){
+
+   updateMesh(landmarks)
+
+  }
 
  }
-
- material.uniforms.time.value =
-  clock.getElapsedTime()
 
  renderer.render(scene,camera)
 
@@ -167,21 +194,15 @@ function onResults(results){
 
 /* Start */
 
-document.getElementById("startBtn").onclick=()=>{
+video.onloadedmetadata = () => {
 
- video.onloadedmetadata=()=>{
+ canvas.width = video.videoWidth
+ canvas.height = video.videoHeight
 
-  canvas.width = video.videoWidth
-  canvas.height = video.videoHeight
+ setupThree(canvas.width,canvas.height)
 
-  setupThree(canvas.width,canvas.height)
+ setupFaceMesh()
 
-  setupFaceMesh()
-
-  video.play()
-
-  processFrame()
-
- }
+ processFrame()
 
 }
