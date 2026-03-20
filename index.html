@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Deepmake</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+</head>
+
+<body>
+
+<h1>Deepmake</h1>
+  <p>deepfakes but worse</p>
+
+<input type="file" id="source">
+<input type="file" id="target">
+
+<button onclick="runSwap()">Swap Faces</button>
+
+<canvas id="canvas"></canvas>
+
+<script src="app.js"></script>
+
+</body>
+</html>
