@@ -2,10 +2,12 @@
 <html>
 <head>
 
+<meta charset="UTF-8">
 <title>DeepMake</title>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160/build/three.min.js"></script>
 
 <link rel="stylesheet" href="style.css">
 
@@ -14,24 +16,16 @@
 <body>
 
 <h1>DeepMake</h1>
-  <p>deepfake but worse</p>
 
-<div class="controls">
+<input type="file" id="videoInput">
 
-<label>Source Face</label>
-<input type="file" id="sourceImage">
-
-<label>Target Video</label>
-<input type="file" id="targetVideo">
-
-<button onclick="startProcessing()">Process Video</button>
-<button onclick="downloadVideo()">Download Video</button>
-
+<div>
+<button id="startBtn">Start Processing</button>
+<button id="downloadBtn">Download Video</button>
 </div>
 
 <video id="video" controls></video>
-
-<canvas id="canvas"></canvas>
+<canvas id="outputCanvas"></canvas>
 
 <script src="app.js"></script>
 
