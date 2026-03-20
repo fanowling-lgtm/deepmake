@@ -1,15 +1,16 @@
 body{
- font-family:Arial;
  background:#111;
  color:white;
+ font-family:Arial;
  text-align:center;
 }
 
-canvas{
- border:2px solid white;
+video{
  margin-top:20px;
+ max-width:600px;
 }
 
-.controls{
- margin:20px;
+canvas{
+ margin-top:20px;
+ border:2px solid white;
 }
