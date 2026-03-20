@@ -1,152 +1,209 @@
-let model
-let sourceFaceCanvas
-
-const canvas = document.getElementById("canvas")
+const video = document.getElementById("video")
+const canvas = document.getElementById("outputCanvas")
 const ctx = canvas.getContext("2d")
 
-const video = document.getElementById("video")
+const videoInput = document.getElementById("videoInput")
+const startBtn = document.getElementById("startBtn")
+const downloadBtn = document.getElementById("downloadBtn")
 
-let mediaRecorder
-let recordedChunks = []
+let faceMesh
+let renderer
+let scene
+let camera
+let mesh
 
-async function loadModel(){
+let recorder
+let chunks=[]
 
- model = await tf.loadGraphModel(
-   "model/faceswap_model.json"
+/* Load Video */
+
+videoInput.onchange = () => {
+
+ const file = videoInput.files[0]
+ video.src = URL.createObjectURL(file)
+
+}
+
+/* Setup Three.js */
+
+function setupThree(width,height){
+
+ renderer = new THREE.WebGLRenderer({canvas:canvas})
+ renderer.setSize(width,height)
+
+ scene = new THREE.Scene()
+
+ camera = new THREE.OrthographicCamera(
+  -1,1,1,-1,0.1,10
  )
 
-}
-
-loadModel()
-
-async function loadImage(file){
-
- return new Promise(resolve=>{
-
-  const img = new Image()
-  img.src = URL.createObjectURL(file)
-
-  img.onload=()=>resolve(img)
-
- })
+ camera.position.z = 1
 
 }
 
-function cropFace(img){
+/* Build Mesh */
 
- const c = document.createElement("canvas")
- const cx = c.getContext("2d")
+function createMesh(landmarks){
 
- c.width = 128
- c.height = 128
+ const vertices=[]
 
- cx.drawImage(img,0,0,128,128)
+ for(let p of landmarks){
 
- return c
+  vertices.push(
+   (p.x-0.5)*2,
+   -(p.y-0.5)*2,
+   p.z
+  )
 
-}
-
-async function runModel(faceCanvas){
-
- const tensor = tf.browser.fromPixels(faceCanvas)
-   .resizeBilinear([128,128])
-   .toFloat()
-   .div(255)
-   .expandDims(0)
-
- const output = await model.executeAsync(tensor)
-
- return output.squeeze()
-}
-
-function tensorToCanvas(tensor){
-
- const data = tensor.mul(255).dataSync()
-
- const c = document.createElement("canvas")
- c.width = 128
- c.height = 128
-
- const cx = c.getContext("2d")
-
- const imageData = cx.createImageData(128,128)
-
- for(let i=0;i<data.length;i++){
-  imageData.data[i]=data[i]
  }
 
- cx.putImageData(imageData,0,0)
+ const geometry = new THREE.BufferGeometry()
 
- return c
+ geometry.setAttribute(
+  "position",
+  new THREE.Float32BufferAttribute(vertices,3)
+ )
+
+ const material = new THREE.PointsMaterial({
+  color:0xffffff,
+  size:0.01
+ })
+
+ mesh = new THREE.Points(geometry,material)
+
+ scene.add(mesh)
+
 }
 
-function watermark(){
+/* Warp Face Geometry */
+
+function warpGeometry(landmarks){
+
+ const positions = mesh.geometry.attributes.position.array
+
+ for(let i=0;i<landmarks.length;i++){
+
+  let p = landmarks[i]
+
+  let x = (p.x-0.5)*2
+  let y = -(p.y-0.5)*2
+
+  /* Example warp: stretch lower face */
+
+  if(p.y > 0.65){
+
+   x *= 1.2
+   y *= 1.1
+
+  }
+
+  positions[i*3] = x
+  positions[i*3+1] = y
+  positions[i*3+2] = p.z
+
+ }
+
+ mesh.geometry.attributes.position.needsUpdate=true
+
+}
+
+/* Watermark */
+
+function drawWatermark(){
 
  ctx.fillStyle="white"
  ctx.font="20px Arial"
 
  ctx.fillText(
-  "SYNTHETIC VIDEO",
+  "SYNTHETIC VFX",
   10,
   30
  )
+
 }
+
+/* FaceMesh Setup */
+
+function setupFaceMesh(){
+
+ faceMesh = new FaceMesh({
+  locateFile:(file)=>
+   `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+ })
+
+ faceMesh.setOptions({
+
+  maxNumFaces:1,
+  refineLandmarks:true,
+  minDetectionConfidence:0.5,
+  minTrackingConfidence:0.5
+
+ })
+
+ faceMesh.onResults(onResults)
+
+}
+
+/* Process Each Frame */
 
 async function processFrame(){
 
- ctx.drawImage(video,0,0,canvas.width,canvas.height)
+ if(video.paused || video.ended) return
 
- const swappedTensor = await runModel(sourceFaceCanvas)
+ await faceMesh.send({image:video})
 
- const swappedCanvas = tensorToCanvas(swappedTensor)
-
- ctx.drawImage(
-  swappedCanvas,
-  canvas.width/2-64,
-  canvas.height/2-64,
- 128,
- 128
- )
-
- watermark()
-
- if(!video.paused && !video.ended){
-
-  requestAnimationFrame(processFrame)
-
- }
+ requestAnimationFrame(processFrame)
 
 }
 
-async function startProcessing(){
+/* FaceMesh Results */
 
- const sourceFile =
-  document.getElementById("sourceImage").files[0]
+function onResults(results){
 
- const videoFile =
-  document.getElementById("targetVideo").files[0]
+ ctx.drawImage(video,0,0,canvas.width,canvas.height)
 
- const sourceImg = await loadImage(sourceFile)
+ if(results.multiFaceLandmarks){
 
- sourceFaceCanvas = cropFace(sourceImg)
+  const landmarks = results.multiFaceLandmarks[0]
 
- video.src = URL.createObjectURL(videoFile)
+  if(!mesh){
 
- video.onloadedmetadata=()=>{
+   createMesh(landmarks)
+
+  }
+
+  warpGeometry(landmarks)
+
+  renderer.render(scene,camera)
+
+ }
+
+ drawWatermark()
+
+}
+
+/* Start Processing */
+
+startBtn.onclick = () => {
+
+ video.onloadedmetadata = () => {
 
   canvas.width = video.videoWidth
   canvas.height = video.videoHeight
 
+  setupThree(canvas.width,canvas.height)
+
+  setupFaceMesh()
+
   const stream = canvas.captureStream(30)
 
-  mediaRecorder =
-   new MediaRecorder(stream)
+  recorder = new MediaRecorder(stream)
 
-  mediaRecorder.ondataavailable=e=>{
-   recordedChunks.push(e.data)
+  recorder.ondataavailable=e=>{
+   chunks.push(e.data)
   }
 
-  mediaRecorder.start()
+  recorder.start()
 
   video.play()
 
@@ -154,27 +211,24 @@ async function startProcessing(){
 
  }
 
- video.onended=()=>{
-
-  mediaRecorder.stop()
-
- }
-
 }
 
-function downloadVideo(){
+/* Download Video */
 
- const blob =
-  new Blob(recordedChunks,{
-   type:"video/webm"
-  })
+downloadBtn.onclick = () => {
+
+ recorder.stop()
+
+ const blob = new Blob(chunks,{
+  type:"video/webm"
+ })
 
  const url = URL.createObjectURL(blob)
 
  const a = document.createElement("a")
 
  a.href = url
- a.download = "synthetic_video.webm"
+ a.download = "face_vfx_output.webm"
 
  a.click()
 
