@@ -1,23 +1,20 @@
 const video = document.getElementById("video")
-const canvas = document.getElementById("outputCanvas")
-const ctx = canvas.getContext("2d")
-
+const canvas = document.getElementById("canvas")
 const videoInput = document.getElementById("videoInput")
-const startBtn = document.getElementById("startBtn")
-const downloadBtn = document.getElementById("downloadBtn")
 
-let faceMesh
 let renderer
 let scene
 let camera
 let mesh
+let material
 
-let recorder
-let chunks=[]
+let faceMesh
 
-/* Load Video */
+let clock = new THREE.Clock()
 
-videoInput.onchange = () => {
+/* Load video */
+
+videoInput.onchange = ()=>{
 
  const file = videoInput.files[0]
  video.src = URL.createObjectURL(file)
@@ -26,22 +23,21 @@ videoInput.onchange = () => {
 
 /* Setup Three.js */
 
-function setupThree(width,height){
+function setupThree(w,h){
 
- renderer = new THREE.WebGLRenderer({canvas:canvas})
- renderer.setSize(width,height)
+ renderer = new THREE.WebGLRenderer({canvas})
+ renderer.setSize(w,h)
 
  scene = new THREE.Scene()
 
- camera = new THREE.OrthographicCamera(
-  -1,1,1,-1,0.1,10
- )
+ camera =
+  new THREE.OrthographicCamera(-1,1,1,-1,0.1,10)
 
  camera.position.z = 1
 
 }
 
-/* Build Mesh */
+/* Create Face Geometry */
 
 function createMesh(landmarks){
 
@@ -57,68 +53,53 @@ function createMesh(landmarks){
 
  }
 
- const geometry = new THREE.BufferGeometry()
+ const geometry =
+  new THREE.BufferGeometry()
 
  geometry.setAttribute(
   "position",
   new THREE.Float32BufferAttribute(vertices,3)
  )
 
- const material = new THREE.PointsMaterial({
-  color:0xffffff,
-  size:0.01
- })
+ material =
+  new THREE.ShaderMaterial({
 
- mesh = new THREE.Points(geometry,material)
+   vertexShader,
+   fragmentShader,
+
+   uniforms:{
+    time:{value:0}
+   }
+
+  })
+
+ mesh = new THREE.Points(
+  geometry,
+  material
+ )
 
  scene.add(mesh)
 
 }
 
-/* Warp Face Geometry */
+/* Update Geometry from Face Tracking */
 
-function warpGeometry(landmarks){
+function updateGeometry(landmarks){
 
- const positions = mesh.geometry.attributes.position.array
+ const pos =
+  mesh.geometry.attributes.position.array
 
  for(let i=0;i<landmarks.length;i++){
 
   let p = landmarks[i]
 
-  let x = (p.x-0.5)*2
-  let y = -(p.y-0.5)*2
-
-  /* Example warp: stretch lower face */
-
-  if(p.y > 0.65){
-
-   x *= 1.2
-   y *= 1.1
-
-  }
-
-  positions[i*3] = x
-  positions[i*3+1] = y
-  positions[i*3+2] = p.z
+  pos[i*3] = (p.x-0.5)*2
+  pos[i*3+1] = -(p.y-0.5)*2
+  pos[i*3+2] = p.z
 
  }
 
  mesh.geometry.attributes.position.needsUpdate=true
-
-}
-
-/* Watermark */
-
-function drawWatermark(){
-
- ctx.fillStyle="white"
- ctx.font="20px Arial"
-
- ctx.fillText(
-  "SYNTHETIC VFX",
-  10,
-  30
- )
 
 }
 
@@ -127,8 +108,10 @@ function drawWatermark(){
 function setupFaceMesh(){
 
  faceMesh = new FaceMesh({
+
   locateFile:(file)=>
    `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+
  })
 
  faceMesh.setOptions({
@@ -144,7 +127,7 @@ function setupFaceMesh(){
 
 }
 
-/* Process Each Frame */
+/* Frame Processing */
 
 async function processFrame(){
 
@@ -156,15 +139,14 @@ async function processFrame(){
 
 }
 
-/* FaceMesh Results */
+/* Results Handler */
 
 function onResults(results){
 
- ctx.drawImage(video,0,0,canvas.width,canvas.height)
-
  if(results.multiFaceLandmarks){
 
-  const landmarks = results.multiFaceLandmarks[0]
+  const landmarks =
+   results.multiFaceLandmarks[0]
 
   if(!mesh){
 
@@ -172,21 +154,22 @@ function onResults(results){
 
   }
 
-  warpGeometry(landmarks)
-
-  renderer.render(scene,camera)
+  updateGeometry(landmarks)
 
  }
 
- drawWatermark()
+ material.uniforms.time.value =
+  clock.getElapsedTime()
+
+ renderer.render(scene,camera)
 
 }
 
-/* Start Processing */
+/* Start */
 
-startBtn.onclick = () => {
+document.getElementById("startBtn").onclick=()=>{
 
- video.onloadedmetadata = () => {
+ video.onloadedmetadata=()=>{
 
   canvas.width = video.videoWidth
   canvas.height = video.videoHeight
@@ -195,41 +178,10 @@ startBtn.onclick = () => {
 
   setupFaceMesh()
 
-  const stream = canvas.captureStream(30)
-
-  recorder = new MediaRecorder(stream)
-
-  recorder.ondataavailable=e=>{
-   chunks.push(e.data)
-  }
-
-  recorder.start()
-
   video.play()
 
   processFrame()
 
  }
-
-}
-
-/* Download Video */
-
-downloadBtn.onclick = () => {
-
- recorder.stop()
-
- const blob = new Blob(chunks,{
-  type:"video/webm"
- })
-
- const url = URL.createObjectURL(blob)
-
- const a = document.createElement("a")
-
- a.href = url
- a.download = "face_vfx_output.webm"
-
- a.click()
 
 }
